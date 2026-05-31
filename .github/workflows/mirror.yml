@@ -1,8 +1,8 @@
-name: Auto Mirror ZIP File
+name: Auto Mirror ZIP File qiftech.cn.lab.exe.win64.zip
 
 # 触发规则：
-# 1. 每天 00:00 自动运行（UTC时间，国内对应早8点）
-# 2. 也可手动在页面触发
+# 每天 UTC 00:00 = 北京时间 08:00 自动运行
+# 支持页面手动触发
 on:
   schedule:
     - cron: '0 0 * * *'
@@ -15,33 +15,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1. 下载目标网站的 ZIP 文件
-      - name: Download target ZIP
+      # 1. 下载目标文件，增加 3分钟超时 + 重试
+      - name: Download target file
         run: |
-          # ========== 在这里修改你的 ZIP 直链 ==========
           TARGET_URL="https://qiftech.cn/app/win/qiftech.cn.lab.exe.win64.zip"
-          # 保存文件名（自定义）
           FILE_NAME="qiftech.cn.lab.exe.win64.zip"
-          wget -O $FILE_NAME $TARGET_URL
+          # 超时180秒(3分钟)，失败重试2次
+          timeout 180 wget --tries=2 -O $FILE_NAME $TARGET_URL
 
-      # 2. 对比新旧文件，判断是否更新
+      # 2. 对比本地文件是否有更新
       - name: Check file changes
         id: diff
         run: |
           FILE_NAME="qiftech.cn.lab.exe.win64.zip"
-          # 检查文件是否发生变动
-          if git status --porcelain | grep $FILE_NAME; then
+          if git status --porcelain | grep "$FILE_NAME"; then
             echo "status=updated" >> $GITHUB_OUTPUT
           else
             echo "status=nochange" >> $GITHUB_OUTPUT
           fi
 
-      # 3. 有更新则提交、推送回仓库
+      # 3. 有更新则提交推送
       - name: Commit & Push updated file
         if: steps.diff.outputs.status == 'updated'
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           git add .
-          git commit -m "Auto update ZIP file $(date +'%Y-%m-%d %H:%M')"
+          git commit -m "Auto update file $(date +'%Y-%m-%d %H:%M')"
           git push origin main
