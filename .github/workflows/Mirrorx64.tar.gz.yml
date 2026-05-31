@@ -1,4 +1,4 @@
-name: Auto Mirror File latest-win
+name: Auto Mirror File latest-x64
 
 concurrency:
   group: ${{ github.workflow }}
