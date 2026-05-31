@@ -18,7 +18,7 @@ jobs:
         run: |
           # 原qiftech链接（优先https）
           TARGET_URL="https://qiftech.cn/app/ubuntu/qiftech.cn.lab.x64.tar.gz"
-          FILE_NAME="qiftech.cn.lab.exe.win64.zip"
+          FILE_NAME="qiftech.cn.lab.x64.tar.gz"
 
           # 若要临时测GitHub raw，把上面两行注释，用下面这行：
           # TARGET_URL="https://ghproxy.cn/https://github.com/D20003000/zip-mirror/raw/refs/heads/main/test.zip"
@@ -30,7 +30,7 @@ jobs:
       - name: Check file changes
         id: diff
         run: |
-          FILE_NAME="qiftech.cn.lab.exe.win64.zip"
+          FILE_NAME="qiftech.cn.lab.x64.tar.gz"
           if git status --porcelain | grep "$FILE_NAME"; then
             echo "status=updated" >> $GITHUB_OUTPUT
           else
