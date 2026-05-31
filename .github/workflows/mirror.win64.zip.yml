@@ -1,5 +1,8 @@
-=======
-name: Auto Mirror ZIP File win64.zip
+ name: Auto Mirror ZIP File win64.zip
+
+concurrency:
+  group: ${{ github.workflow }}   
+  cancel-in-progress: false       
 
 on:
   schedule:
