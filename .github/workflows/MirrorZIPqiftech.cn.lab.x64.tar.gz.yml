@@ -1,45 +1,47 @@
-name: Auto Mirror ZIP File qiftech.cn.lab.x64.tar.gz
+name: Auto Mirror ZIP File x64.tar.gz
 
-# 触发规则：
-# 每天 UTC 00:00 = 北京时间 08:00 自动运行
-# 支持页面手动触发
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *'   # UTC 0点 = 北京时间8点
   workflow_dispatch:
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
+    timeout-minutes: 35   # 整个job最多15分钟
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 1. 下载目标文件，增加 30分钟超时 + 重试
       - name: Download target file
+        timeout-minutes: 30  # 下载步骤最多30分钟
         run: |
+          # 原qiftech链接（优先https）
           TARGET_URL="https://qiftech.cn/app/ubuntu/qiftech.cn.lab.x64.tar.gz"
-          FILE_NAME="qiftech.cn.lab.x64.tar.gz"
-          # 超时1800秒(3分钟)，失败重试2次
-          timeout 1800 wget --tries=2 -O $FILE_NAME $TARGET_URL
+          FILE_NAME="qiftech.cn.lab.exe.win64.zip"
 
-      # 2. 对比本地文件是否有更新
+          # 若要临时测GitHub raw，把上面两行注释，用下面这行：
+          # TARGET_URL="https://ghproxy.cn/https://github.com/D20003000/zip-mirror/raw/refs/heads/main/test.zip"
+          # FILE_NAME="test.zip"
+
+          # 断点续传 + 超时 + 重试
+          wget -c --timeout=60 --tries=3 -O $FILE_NAME $TARGET_URL
+
       - name: Check file changes
         id: diff
         run: |
-          FILE_NAME="qiftech.cn.lab.x64.tar.gz"
+          FILE_NAME="qiftech.cn.lab.exe.win64.zip"
           if git status --porcelain | grep "$FILE_NAME"; then
             echo "status=updated" >> $GITHUB_OUTPUT
           else
             echo "status=nochange" >> $GITHUB_OUTPUT
           fi
 
-      # 3. 有更新则提交推送
-      - name: Commit & Push updated file
+      - name: Commit & Push
         if: steps.diff.outputs.status == 'updated'
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
           git add .
-          git commit -m "Auto update file $(date +'%Y-%m-%d %H:%M')"
+          git commit -m "Auto update $(date +'%Y-%m-%d %H:%M')"
           git push origin main
