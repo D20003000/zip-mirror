@@ -10,10 +10,10 @@ on:
   workflow_dispatch:
 
 env:
-  # ========== 【只改这里】 ==========
+  # ========== ==========
   TARGET_URL: "https://qiftech.cn/app/win/qiftech.cn.lab.exe.win64.zip"
   FILE_NAME: "qiftech.cn.lab.exe.win64.zip"
-  RELEASE_TAG: "latest-win"          # 每个文件用不同 tag，避免冲突
+  RELEASE_TAG: "latest-win"          # 避免冲突
   # =================================
 
 jobs:
