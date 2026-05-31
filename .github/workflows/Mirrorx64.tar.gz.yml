@@ -1,72 +1,101 @@
-name: Auto Mirror ZIP File
+name: Auto Mirror qiftech.cn.lab.x64.tar.gz
 
-# 并发控制：同工作流只允许单任务运行，避免冲突
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
 on:
   schedule:
-    - cron: '0 0 * * *'   # UTC 0点 = 北京时间 8:00
+    - cron: '0 0 * * *'   # 北京时间每天 8:00
   workflow_dispatch:
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write   # 关键：允许创建 Release 和推送代码
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 需要完整历史以便后续 rebase
 
-      # 下载文件：断点续传 + 超时 + 重试
-      - name: Download target file
-        timeout-minutes: 10
+      # ========== 步骤 1：用 HTTP Header 检测远程是否更新（不下载整个文件） ==========
+      - name: Check remote update
+        id: check
         run: |
-          TARGET_URL="http://qiftech.cn/app/ubuntu/qiftech.cn.lab.x64.tar.gz"
-          FILE_NAME="qiftech.cn.lab.x64.tar.gz"
-          wget -c --timeout=60 --tries=3 -O $FILE_NAME $TARGET_URL
-          
-          # 验证下载是否成功
-          if [ ! -f "$FILE_NAME" ] || [ ! -s "$FILE_NAME" ]; then
-            echo "❌ Download failed or file empty"
+          TARGET_URL="https://qiftech.cn/app/ubuntu/qiftech.cn.lab.x64.tar.gz"
+          META_FILE=".sync_meta"
+
+          HEADERS=$(curl -sI --max-time 30 \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+            "$TARGET_URL")
+
+          LM=$(echo "$HEADERS" | grep -i "^last-modified:" | sed 's/.*: //' | tr -d '\r')
+          ETAG=$(echo "$HEADERS" | grep -i "^etag:" | sed 's/.*: //' | tr -d '\r')
+          CL=$(echo "$HEADERS" | grep -i "^content-length:" | sed 's/.*: //' | tr -d '\r')
+
+          REMOTE_SIG="${LM}##${ETAG}##${CL}"
+          echo "Remote signature: $REMOTE_SIG"
+
+          if [ -f "$META_FILE" ]; then
+            LOCAL_SIG=$(cat "$META_FILE")
+            echo "Local signature: $LOCAL_SIG"
+          else
+            LOCAL_SIG=""
+          fi
+
+          if [ "$REMOTE_SIG" != "$LOCAL_SIG" ] || [ -z "$LOCAL_SIG" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "sig=$REMOTE_SIG" >> $GITHUB_OUTPUT
+            echo "url=$TARGET_URL" >> $GITHUB_OUTPUT
+            echo "✅ Update detected!"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "⏭️ No update, skip."
+          fi
+
+      # ========== 步骤 2：有更新才下载（节省流量） ==========
+      - name: Download file
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          wget --timeout=60 --tries=3 -O qiftech.cn.lab.x64.tar.gz "${{ steps.check.outputs.url }}"
+          SIZE=$(stat -c%s qiftech.cn.lab.x64.tar.gz)
+          echo "Downloaded size: $SIZE bytes"
+          if [ "$SIZE" -lt 2048 ]; then
+            echo "❌ File too small, probably an error page"
             exit 1
           fi
-          echo "✅ Download successful"
 
-      # 检测文件是否变更（修正版）
-      - name: Check file changes
-        id: diff
+      # ========== 步骤 3：删除旧 Release（固定用 latest 标签，下载链接永久不变） ==========
+      - name: Delete old release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          FILE_NAME="qiftech.cn.lab.x64.tar.gz"
-          
-          # 暂存文件到 git
-          git add $FILE_NAME
-          
-          # 检查是否有实际变更（对比暂存区和HEAD）
-          if git diff --cached --quiet; then
-            echo "status=nochange" >> $GITHUB_OUTPUT
-            echo "📝 File content unchanged, skipping commit"
-          else
-            echo "status=updated" >> $GITHUB_OUTPUT
-            echo "🔄 File changed, will commit and push"
-          fi
+          gh release delete latest --yes 2>/dev/null || true
+          git push --delete origin latest 2>/dev/null || true
 
-      # 有更新：先拉远端代码，再提交推送
-      - name: Commit & Push updated file
-        if: steps.diff.outputs.status == 'updated'
+      # ========== 步骤 4：上传到新 Release（大文件放这里！） ==========
+      - name: Create release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
-          
-          # 拉取远端最新代码（关键步骤）
-          echo "📥 Pulling latest changes..."
-          git pull origin main --rebase --autostash
-          
-          # 提交（暂存区已经有文件）
-          git commit -m "Auto update $(date +'%Y-%m-%d %H:%M:%S')"
-          
-          # 推送
-          echo "📤 Pushing to remote..."
-          git push origin main
-          
-          echo "✅ Successfully updated and pushed"
+          gh release create latest qiftech.cn.lab.x64.tar.gz \
+            --title "Mirror $(date +'%Y-%m-%d %H:%M UTC')" \
+            --notes "Source: ${{ steps.check.outputs.url }}"
+
+      # ========== 步骤 5：只保存几字节的元数据到仓库 ==========
+      - name: Save metadata
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          echo "${{ steps.check.outputs.sig }}" > .sync_meta
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .sync_meta
+          git commit -m "chore: update metadata $(date +%F)" || true
+          git pull --rebase origin main || true
+          git push origin main || true
