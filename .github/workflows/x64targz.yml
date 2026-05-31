@@ -1,0 +1,72 @@
+name: Auto Mirror ZIP File x64.tar.gz
+
+# 并发控制：同工作流只允许单任务运行，避免冲突
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # UTC 0点 = 北京时间 8:00
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 下载文件：断点续传 + 超时 + 重试
+      - name: Download target file
+        timeout-minutes: 10
+        run: |
+          TARGET_URL="https://qiftech.cn/app/ubuntu/qiftech.cn.lab.x64.tar.gz"
+          FILE_NAME="qiftech.cn.lab.x64.tar.gz"
+          wget -c --timeout=60 --tries=3 -O $FILE_NAME $TARGET_URL
+          
+          # 验证下载是否成功
+          if [ ! -f "$FILE_NAME" ] || [ ! -s "$FILE_NAME" ]; then
+            echo "❌ Download failed or file empty"
+            exit 1
+          fi
+          echo "✅ Download successful"
+
+      # 检测文件是否变更（修正版）
+      - name: Check file changes
+        id: diff
+        run: |
+          FILE_NAME="qiftech.cn.lab.x64.tar.gz"
+          
+          # 暂存文件到 git
+          git add $FILE_NAME
+          
+          # 检查是否有实际变更（对比暂存区和HEAD）
+          if git diff --cached --quiet; then
+            echo "status=nochange" >> $GITHUB_OUTPUT
+            echo "📝 File content unchanged, skipping commit"
+          else
+            echo "status=updated" >> $GITHUB_OUTPUT
+            echo "🔄 File changed, will commit and push"
+          fi
+
+      # 有更新：先拉远端代码，再提交推送
+      - name: Commit & Push updated file
+        if: steps.diff.outputs.status == 'updated'
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          
+          # 拉取远端最新代码（关键步骤）
+          echo "📥 Pulling latest changes..."
+          git pull origin main --rebase --autostash
+          
+          # 提交（暂存区已经有文件）
+          git commit -m "Auto update $(date +'%Y-%m-%d %H:%M:%S')"
+          
+          # 推送
+          echo "📤 Pushing to remote..."
+          git push origin main
+          
+          echo "✅ Successfully updated and pushed"
