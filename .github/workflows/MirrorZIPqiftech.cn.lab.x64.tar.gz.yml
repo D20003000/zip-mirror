@@ -21,7 +21,7 @@ jobs:
           TARGET_URL="https://qiftech.cn/app/ubuntu/qiftech.cn.lab.x64.tar.gz"
           FILE_NAME="qiftech.cn.lab.x64.tar.gz"
           # 超时1800秒(3分钟)，失败重试2次
-          timeout 180 wget --tries=2 -O $FILE_NAME $TARGET_URL
+          timeout 1800 wget --tries=2 -O $FILE_NAME $TARGET_URL
 
       # 2. 对比本地文件是否有更新
       - name: Check file changes
