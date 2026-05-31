@@ -1,5 +1,7 @@
 name: Auto Mirror ZIP File x64.tar.gz
-
+concurrency:
+  group: ${{ github.workflow }}   
+  cancel-in-progress: false    
 on:
   schedule:
     - cron: '0 0 * * *'   # UTC 0点 = 北京时间8点
