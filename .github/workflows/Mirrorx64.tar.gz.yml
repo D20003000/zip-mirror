@@ -71,13 +71,16 @@ jobs:
             exit 1
           fi
 
-      - name: Delete old release
+      - name: Delete old release and local tag
         if: steps.check.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 删除远程 Release 和远程标签
           gh release delete "$RELEASE_TAG" --yes 2>/dev/null || true
           git push --delete origin "$RELEASE_TAG" 2>/dev/null || true
+          # 删除本地标签（关键！）
+          git tag -d "$RELEASE_TAG" 2>/dev/null || true
 
       - name: Create release
         if: steps.check.outputs.changed == 'true'
@@ -94,7 +97,7 @@ jobs:
           META_FILE=".sync_meta.${FILE_NAME}"
           echo "${{ steps.check.outputs.sig }}" > "$META_FILE"
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config.user.email "github-actions[bot]@users.noreply.github.com"
           git add "$META_FILE"
           git commit -m "chore: update metadata for $FILE_NAME $(date +%F)" || true
           git pull --rebase origin main || true
