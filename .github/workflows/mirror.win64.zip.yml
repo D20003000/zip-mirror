@@ -1,4 +1,4 @@
-name: Auto Mirror File latest-x64
+name: Auto Mirror File latest-win
 
 concurrency:
   group: ${{ github.workflow }}
@@ -6,15 +6,12 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 0 * * *'   # 北京时间每天 8:00
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 env:
-  # ========== 从 GitHub Variables 读取配置 ==========
-    TARGET_URL: ${{ vars.TARGET_URL_WIN }}   # 改为 WIN 的变量
-  FILE_NAME: "qiftech.cn.lab.exe.win64.zip"  # 改为 Windows 文件名
-  RELEASE_TAG: "latest-win"                 # 改为 Windows 的 Release Tag        
-  # =================================
+  FILE_NAME: "qiftech.cn.lab.exe.win64.zip"
+  RELEASE_TAG: "latest-win"
 
 jobs:
   mirror:
@@ -29,20 +26,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 步骤 0：验证变量是否已设置
-      - name: Verify configuration
-        run: |
-          if [ -z "$TARGET_URL" ]; then
-            echo "❌ TARGET_URL_X64 variable not set in GitHub Variables"
-            echo "Please add it in: Settings → Secrets and variables → Actions → Variables"
-            exit 1
-          fi
-          echo "✅ TARGET_URL: $TARGET_URL"
-
-      # 步骤 1：检测远程是否更新
       - name: Check remote update
         id: check
         run: |
+          TARGET_URL="${{ secrets.TARGET_URL_WIN }}"
           META_FILE=".sync_meta.${FILE_NAME}"
 
           HEADERS=$(curl -sI --max-time 30 \
@@ -72,10 +59,10 @@ jobs:
             echo "⏭️ No update."
           fi
 
-      # 步骤 2：有更新才下载
       - name: Download file
         if: steps.check.outputs.changed == 'true'
         run: |
+          TARGET_URL="${{ secrets.TARGET_URL_WIN }}"
           wget --timeout=60 --tries=3 -O "$FILE_NAME" "$TARGET_URL"
           SIZE=$(stat -c%s "$FILE_NAME")
           echo "Downloaded: $FILE_NAME, size: $SIZE bytes"
@@ -84,7 +71,6 @@ jobs:
             exit 1
           fi
 
-      # 步骤 3：删除旧 Release
       - name: Delete old release
         if: steps.check.outputs.changed == 'true'
         env:
@@ -93,7 +79,6 @@ jobs:
           gh release delete "$RELEASE_TAG" --yes 2>/dev/null || true
           git push --delete origin "$RELEASE_TAG" 2>/dev/null || true
 
-      # 步骤 4：上传到新 Release
       - name: Create release
         if: steps.check.outputs.changed == 'true'
         env:
@@ -101,16 +86,15 @@ jobs:
         run: |
           gh release create "$RELEASE_TAG" "$FILE_NAME" \
             --title "Mirror $FILE_NAME $(date +'%Y-%m-%d %H:%M UTC')" \
-            --notes "Source: $TARGET_URL"
+            --notes "Auto mirror"
 
-      # 步骤 5：保存元数据到仓库
       - name: Save metadata
         if: steps.check.outputs.changed == 'true'
         run: |
           META_FILE=".sync_meta.${FILE_NAME}"
           echo "${{ steps.check.outputs.sig }}" > "$META_FILE"
           git config user.name "github-actions[bot]"
-          git config.user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "$META_FILE"
           git commit -m "chore: update metadata for $FILE_NAME $(date +%F)" || true
           git pull --rebase origin main || true
