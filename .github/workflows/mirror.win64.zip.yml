@@ -1,4 +1,4 @@
-name: Auto Mirror File latest-win
+name: Auto Mirror File latest-x64
 
 concurrency:
   group: ${{ github.workflow }}
@@ -10,10 +10,10 @@ on:
   workflow_dispatch:
 
 env:
-  # ========== ==========
-  TARGET_URL: "https://qiftech.cn/app/win/qiftech.cn.lab.exe.win64.zip"
-  FILE_NAME: "qiftech.cn.lab.exe.win64.zip"
-  RELEASE_TAG: "latest-win"          # 避免冲突
+  # ========== 从 GitHub Variables 读取配置 ==========
+    TARGET_URL: ${{ vars.TARGET_URL_WIN }}   # 改为 WIN 的变量
+  FILE_NAME: "qiftech.cn.lab.exe.win64.zip"  # 改为 Windows 文件名
+  RELEASE_TAG: "latest-win"                 # 改为 Windows 的 Release Tag        
   # =================================
 
 jobs:
@@ -28,6 +28,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # 步骤 0：验证变量是否已设置
+      - name: Verify configuration
+        run: |
+          if [ -z "$TARGET_URL" ]; then
+            echo "❌ TARGET_URL_X64 variable not set in GitHub Variables"
+            echo "Please add it in: Settings → Secrets and variables → Actions → Variables"
+            exit 1
+          fi
+          echo "✅ TARGET_URL: $TARGET_URL"
 
       # 步骤 1：检测远程是否更新
       - name: Check remote update
@@ -100,7 +110,7 @@ jobs:
           META_FILE=".sync_meta.${FILE_NAME}"
           echo "${{ steps.check.outputs.sig }}" > "$META_FILE"
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config.user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$META_FILE"
           git commit -m "chore: update metadata for $FILE_NAME $(date +%F)" || true
           git pull --rebase origin main || true
